@@ -121,6 +121,19 @@ function clamp(value: number, min: number, max: number): number {
   return value;
 }
 
+function formatEthAmount(value: number): string {
+  if (!Number.isFinite(value) || value === 0) {
+    return "0";
+  }
+
+  const abs = Math.abs(value);
+  const maxFractionDigits = abs >= 100 ? 2 : abs >= 1 ? 4 : 6;
+  return value.toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: maxFractionDigits,
+  });
+}
+
 function relaxLayout(
   nodesByAddress: Record<string, VizNode>,
   edges: TxEdge[],
@@ -854,6 +867,46 @@ function App() {
     ? nodesByAddress[selectedAddress]
     : undefined;
 
+  const selectedStats = useMemo(() => {
+    if (!selectedAddress) {
+      return null;
+    }
+
+    let incomingTransfers = 0;
+    let outgoingTransfers = 0;
+    let incomingEth = 0;
+    let outgoingEth = 0;
+    let latestBlock = 0;
+
+    for (const edge of edges) {
+      if (edge.to === selectedAddress) {
+        incomingTransfers += 1;
+        const value = Number(edge.value_eth);
+        if (Number.isFinite(value)) {
+          incomingEth += value;
+        }
+        latestBlock = Math.max(latestBlock, edge.block || 0);
+      }
+      if (edge.from === selectedAddress) {
+        outgoingTransfers += 1;
+        const value = Number(edge.value_eth);
+        if (Number.isFinite(value)) {
+          outgoingEth += value;
+        }
+        latestBlock = Math.max(latestBlock, edge.block || 0);
+      }
+    }
+
+    return {
+      incomingTransfers,
+      outgoingTransfers,
+      incomingEth,
+      outgoingEth,
+      totalTransfers: incomingTransfers + outgoingTransfers,
+      latestBlock: latestBlock || null,
+    };
+  }, [edges, selectedAddress]);
+
   const nodeCount = useMemo(
     () => Object.keys(nodesByAddress).length,
     [nodesByAddress],
@@ -974,6 +1027,42 @@ function App() {
             })}
           </g>
         </svg>
+
+        {selectedNode && selectedStats ? (
+          <aside className="node-hover-card" aria-live="polite">
+            <p className="node-hover-title">Selected wallet</p>
+            <p className="node-hover-address">{selectedNode.address}</p>
+            <div className="node-hover-grid">
+              <span>Degree</span>
+              <strong>{selectedNode.degree}</strong>
+              <span>Transfers</span>
+              <strong>{selectedStats.totalTransfers}</strong>
+              <span>Incoming</span>
+              <strong>{selectedStats.incomingTransfers}</strong>
+              <span>Outgoing</span>
+              <strong>{selectedStats.outgoingTransfers}</strong>
+              <span>In ETH</span>
+              <strong>{formatEthAmount(selectedStats.incomingEth)}</strong>
+              <span>Out ETH</span>
+              <strong>{formatEthAmount(selectedStats.outgoingEth)}</strong>
+              <span>Expanded</span>
+              <strong>{selectedNode.expanded ? "yes" : "no"}</strong>
+              <span>Pending</span>
+              <strong>{selectedNode.pending ? "yes" : "no"}</strong>
+              <span>More edges</span>
+              <strong>{selectedNode.hasMore ? "yes" : "no"}</strong>
+              <span>Next offset</span>
+              <strong>
+                {selectedNode.hasMore ? selectedNode.nextOffset : "-"}
+              </strong>
+              <span>Latest block</span>
+              <strong>{selectedStats.latestBlock ?? "-"}</strong>
+            </div>
+            <p className="node-hover-footnote">
+              Click this node again to load more edges when available.
+            </p>
+          </aside>
+        ) : null}
       </section>
     </div>
   );
