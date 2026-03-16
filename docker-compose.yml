@@ -1,0 +1,61 @@
+services:
+  graphdb:
+    image: ontotext/graphdb:11.3.0
+    container_name: wallet-graph-graphdb
+    ports:
+      - "7200:7200"
+    volumes:
+      - graphdb-data:/opt/graphdb/home
+
+  api:
+    image: golang:1.26
+    container_name: wallet-graph-api
+    working_dir: /app
+    command: sh -c "go mod download && go run ."
+    ports:
+      - "8080:8080"
+    environment:
+      DATA_SOURCE: rpc
+      RPC_URL: https://ethereum-rpc.publicnode.com
+      GRAPHDB_URL: http://graphdb:7200
+      GRAPHDB_REPO: wallet-graph
+      DUNE_API_KEY: ${DUNE_API_KEY:-}
+      DUNE_PERFORMANCE: ${DUNE_PERFORMANCE:-}
+      DUNE_CHAIN: ${DUNE_CHAIN:-ethereum}
+      DUNE_LOOKBACK_DAYS: ${DUNE_LOOKBACK_DAYS:-30}
+      DUNE_PAGE_LIMIT: ${DUNE_PAGE_LIMIT:-1000}
+      DUNE_HOP_LIMIT: ${DUNE_HOP_LIMIT:-2000}
+      DUNE_FRONTIER_BATCH: ${DUNE_FRONTIER_BATCH:-20}
+    volumes:
+      - ./api:/app
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+    depends_on:
+      - graphdb
+
+  web:
+    image: node:22
+    container_name: wallet-graph-web
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_BASE: http://localhost:8080
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,api,graphdb}
+      NPM_CONFIG_PROXY: ${NPM_CONFIG_PROXY:-}
+      NPM_CONFIG_HTTPS_PROXY: ${NPM_CONFIG_HTTPS_PROXY:-}
+      NPM_CONFIG_REGISTRY: ${NPM_CONFIG_REGISTRY:-https://registry.npmjs.org/}
+    volumes:
+      - ./web:/app
+      - web-node-modules:/app/node_modules
+    depends_on:
+      - api
+
+volumes:
+  graphdb-data:
+  go-mod-cache:
+  go-build-cache:
+  web-node-modules:
